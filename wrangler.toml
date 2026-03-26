@@ -1,0 +1,30 @@
+name = "echo-asset-manager"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[observability]
+enabled = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "echo-asset-manager"
+database_id = "07326097-5736-4e12-99e9-b14c44c1807a"
+
+[[kv_namespaces]]
+binding = "AM_CACHE"
+id = "d95fa7b2a3ff4fcba7ce95ab2df5e786"
+
+[triggers]
+crons = ["0 5 * * *"]
+
+[[services]]
+binding = "ENGINE_RUNTIME"
+service = "echo-engine-runtime"
+
+[[services]]
+binding = "SHARED_BRAIN"
+service = "echo-shared-brain"
+
+[[services]]
+binding = "EMAIL_SENDER"
+service = "echo-email-sender"
