@@ -13,8 +13,9 @@ async function rateLimit(kv: KVNamespace, key: string, limit: number, windowSec:
   await kv.put(k, JSON.stringify(st), { expirationTtl: windowSec * 2 }); return true;
 }
 function authOk(req: Request, env: Env): boolean { const h = req.headers.get('X-Echo-API-Key') || req.headers.get('Authorization')?.replace('Bearer ', '') || ''; return h === env.ECHO_API_KEY; }
+function slog(level: 'info' | 'warn' | 'error', msg: string, data?: Record<string, unknown>) { const entry = { ts: new Date().toISOString(), level, worker: 'echo-asset-manager', version: '1.0.1', msg, ...data }; if (level === 'error') console.error(JSON.stringify(entry)); else console.log(JSON.stringify(entry)); }
 function json(data: unknown, status = 200) { return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }); }
-function err(msg: string, status = 400) { return json({ error: msg }, status); }
+function err(msg: string, status = 400) { slog('warn', msg, { status }); return json({ error: msg }, status); }
 
 function calcDepreciation(cost: number, salvage: number, lifeMonths: number, monthsElapsed: number, method: string): { monthly: number; accumulated: number; bookValue: number } {
   const depreciable = cost - salvage;
@@ -30,6 +31,21 @@ function calcDepreciation(cost: number, salvage: number, lifeMonths: number, mon
   const monthly = depreciable / lifeMonths;
   const acc = Math.min(monthly * monthsElapsed, depreciable);
   return { monthly, accumulated: acc, bookValue: cost - acc };
+}
+
+
+// Security headers
+const SEC_HEADERS: Record<string, string> = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'X-XSS-Protection': '1; mode=block',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+};
+function withSecHeaders(res: Response): Response {
+  const h = new Headers(res.headers);
+  for (const [k, v] of Object.entries(SEC_HEADERS)) h.set(k, v);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
 }
 
 export default {
@@ -190,7 +206,7 @@ export default {
       }
 
       return err('Not found', 404);
-    } catch (e: any) { return json({ error: 'Internal error', detail: e.message }, 500); }
+    } catch (e: any) { slog('error', 'Internal error', { error: e.message, path: p }); return json({ error: 'Internal error', detail: e.message }, 500); }
   },
 
   async scheduled(_event: ScheduledEvent, env: Env): Promise<void> {
